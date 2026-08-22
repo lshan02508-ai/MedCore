@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	coremodel "github.com/lshan02508-ai/GOLLM/internal/core/model"
 	"github.com/lshan02508-ai/GOLLM/internal/telemetry"
 )
 
@@ -23,6 +24,8 @@ type Proxy struct {
 	requestTimeout    time.Duration
 	firstTokenTimeout time.Duration
 	streamIdleTimeout time.Duration
+	workerID          string
+	metricModel       string
 	logger            *slog.Logger
 	metrics           *telemetry.Metrics
 }
@@ -35,6 +38,8 @@ type Options struct {
 	RequestTimeout    time.Duration
 	FirstTokenTimeout time.Duration
 	StreamIdleTimeout time.Duration
+	WorkerID          string
+	MetricModel       string
 	Logger            *slog.Logger
 	Metrics           *telemetry.Metrics
 }
@@ -62,13 +67,13 @@ func New(opts Options) (*Proxy, error) {
 	if opts.StreamIdleTimeout <= 0 {
 		opts.StreamIdleTimeout = 30 * time.Second
 	}
-	return &Proxy{backend: u, apiKey: opts.APIKey, client: opts.Client, maxBodyBytes: opts.MaxBodyBytes, requestTimeout: opts.RequestTimeout, firstTokenTimeout: opts.FirstTokenTimeout, streamIdleTimeout: opts.StreamIdleTimeout, logger: opts.Logger, metrics: opts.Metrics}, nil
+	return &Proxy{backend: u, apiKey: opts.APIKey, client: opts.Client, maxBodyBytes: opts.MaxBodyBytes, requestTimeout: opts.RequestTimeout, firstTokenTimeout: opts.FirstTokenTimeout, streamIdleTimeout: opts.StreamIdleTimeout, workerID: opts.WorkerID, metricModel: opts.MetricModel, logger: opts.Logger, metrics: opts.Metrics}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	failed := true
 	done := p.metrics.Begin()
-	defer func() { done(failed) }()
+	defer func() { done(failed); markProxyOutcome(r.Context(), failed) }()
 
 	ctx := r.Context()
 	var cancel context.CancelFunc
@@ -105,7 +110,16 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if isSSE(resp.Header) {
-		committed, streamErr := stream(ctx, cancel, w, resp, p.backend.Host, p.firstTokenTimeout, p.streamIdleTimeout)
+		onFirstToken := func() {
+			if metadata, ok := coremodel.RequestMetadataFromContext(r.Context()); ok {
+				model := p.metricModel
+				if model == "" {
+					model = metadata.Model
+				}
+				p.metrics.ObserveRequestTTFT(model, string(metadata.WorkloadClass), p.workerID, time.Since(metadata.ReceivedAt))
+			}
+		}
+		committed, streamErr := stream(ctx, cancel, w, resp, p.backend.Host, p.workerID, p.firstTokenTimeout, p.streamIdleTimeout, onFirstToken)
 		if streamErr != nil {
 			p.handleStreamError(w, r, committed, streamErr)
 			return
@@ -114,7 +128,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commitUpstreamResponse(w, resp, p.backend.Host)
+	commitUpstreamResponse(w, resp, p.backend.Host, p.workerID)
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		p.logger.Debug("response copy failed", "path", r.URL.Path, "error", err)
 		return
@@ -132,7 +146,7 @@ type streamRead struct {
 	err  error
 }
 
-func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, resp *http.Response, upstreamHost string, firstTokenTimeout, idleTimeout time.Duration) (bool, error) {
+func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, resp *http.Response, upstreamHost, workerID string, firstTokenTimeout, idleTimeout time.Duration, onFirstToken func()) (bool, error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return false, errors.New("response writer does not support streaming")
@@ -144,6 +158,7 @@ func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWrite
 	timer := time.NewTimer(firstTokenTimeout)
 	defer timer.Stop()
 	committed := false
+	firstTokenObserved := false
 
 	for {
 		select {
@@ -157,8 +172,14 @@ func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWrite
 			return false, errFirstTokenTimeout
 		case result := <-reads:
 			if len(result.data) > 0 {
+				if !firstTokenObserved {
+					firstTokenObserved = true
+					if onFirstToken != nil {
+						onFirstToken()
+					}
+				}
 				if !committed {
-					commitUpstreamResponse(w, resp, upstreamHost)
+					commitUpstreamResponse(w, resp, upstreamHost, workerID)
 					committed = true
 				}
 				if _, err := w.Write(result.data); err != nil {
@@ -170,7 +191,7 @@ func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWrite
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) {
 					if !committed {
-						commitUpstreamResponse(w, resp, upstreamHost)
+						commitUpstreamResponse(w, resp, upstreamHost, workerID)
 						committed = true
 					}
 					return committed, nil
@@ -213,9 +234,12 @@ func resetTimer(timer *time.Timer, timeout time.Duration) {
 	timer.Reset(timeout)
 }
 
-func commitUpstreamResponse(w http.ResponseWriter, resp *http.Response, upstreamHost string) {
+func commitUpstreamResponse(w http.ResponseWriter, resp *http.Response, upstreamHost, workerID string) {
 	copyHeaders(w.Header(), resp.Header)
 	w.Header().Set("X-GoLLM-Upstream", upstreamHost)
+	if workerID != "" {
+		w.Header().Set("X-GoLLM-Worker-ID", workerID)
+	}
 	w.WriteHeader(resp.StatusCode)
 }
 
@@ -245,13 +269,17 @@ func isSSE(h http.Header) bool {
 
 func copyHeaders(dst, src http.Header) {
 	for key, values := range src {
-		if hopByHopHeader(key) {
+		if hopByHopHeader(key) || internalHeader(key) {
 			continue
 		}
 		for _, value := range values {
 			dst.Add(key, value)
 		}
 	}
+}
+
+func internalHeader(key string) bool {
+	return strings.HasPrefix(strings.ToLower(key), "x-gollm-")
 }
 
 func appendForwardedHeaders(h http.Header, r *http.Request) {

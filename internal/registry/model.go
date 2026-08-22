@@ -28,14 +28,16 @@ const (
 // Worker is immutable registration data. MaxConcurrency equal to zero means
 // that the registry does not impose a static concurrency limit.
 type Worker struct {
-	ID             string
-	Endpoint       string
-	Models         []string
-	MaxConcurrency int64
+	ID                 string
+	Endpoint           string
+	Models             []string
+	MaxConcurrency     int64
+	MaxInflightCost    int64
+	InitialServiceRate float64
 }
 
 func (w Worker) Supports(model string) bool {
-	return slices.Contains(w.Models, model)
+	return slices.Contains(w.Models, "*") || slices.Contains(w.Models, model)
 }
 
 // WorkerSnapshot is a point-in-time copy safe for schedulers and routers to
@@ -43,6 +45,7 @@ func (w Worker) Supports(model string) bool {
 type WorkerSnapshot struct {
 	Worker
 	Health              HealthStatus
+	ObservedHealth      HealthStatus
 	InflightRequests    int64
 	ConsecutiveFailures uint64
 	LastCheckedAt       time.Time
@@ -59,6 +62,8 @@ type Registry interface {
 	Available(string) []WorkerSnapshot
 	MarkHealthy(string, time.Time) error
 	MarkUnhealthy(string, string, time.Time) error
+	RecordHealthSuccess(string, time.Time, bool) error
+	RecordHealthFailure(string, string, time.Time, bool) error
 	SetDraining(string, bool) error
 	Acquire(string) (*Lease, error)
 }
@@ -74,6 +79,9 @@ func normalizeWorker(worker Worker) (Worker, error) {
 	}
 	if worker.MaxConcurrency < 0 {
 		return Worker{}, fmt.Errorf("worker %q max concurrency must not be negative", worker.ID)
+	}
+	if worker.MaxInflightCost < 0 || worker.InitialServiceRate < 0 {
+		return Worker{}, fmt.Errorf("worker %q cost capacity and service rate must not be negative", worker.ID)
 	}
 
 	endpoint, err := url.Parse(strings.TrimSpace(worker.Endpoint))

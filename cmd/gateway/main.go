@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "configs/gateway.json", "path to the gateway JSON configuration")
+	configPath := flag.String("config", "configs/gateway.json", "path to the gateway JSON or YAML configuration")
 	flag.Parse()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	cfg, err := config.Load(*configPath)
@@ -25,16 +25,19 @@ func main() {
 		logger.Error("configuration failed", "error", err)
 		os.Exit(1)
 	}
-	handler, err := app.NewHandler(cfg, logger)
+	application, err := app.New(cfg, logger)
 	if err != nil {
 		logger.Error("gateway initialization failed", "error", err)
 		os.Exit(1)
 	}
-	server := &http.Server{Addr: cfg.Server.Listen, Handler: handler, ReadHeaderTimeout: cfg.ReadHeaderTimeout}
+	server := &http.Server{Addr: cfg.Server.Listen, Handler: application.Handler, ReadHeaderTimeout: cfg.ReadHeaderTimeout}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	application.Start(ctx)
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
 
 		// Restore the default signal behavior so a second signal terminates the
@@ -44,11 +47,19 @@ func main() {
 		if err := shutdownServer(server, cfg.ShutdownTimeout, logger); err != nil {
 			logger.Warn("gateway required forced shutdown", "error", err)
 		}
+		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if err := application.Shutdown(drainCtx); err != nil {
+			logger.Warn("scheduler drain did not finish", "error", err)
+		}
 	}()
-	logger.Info("gateway listening", "address", cfg.Server.Listen, "backend", cfg.Backend.BaseURL)
+	logger.Info("gateway listening", "address", cfg.Server.Listen, "workers", len(cfg.Workers))
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("gateway stopped unexpectedly", "error", err)
 		os.Exit(1)
+	}
+	if ctx.Err() != nil {
+		<-shutdownDone
 	}
 }
 

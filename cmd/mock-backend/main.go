@@ -31,13 +31,18 @@ func main() {
 			http.Error(w, `{"error":{"message":"invalid JSON","type":"invalid_request_error"}}`, http.StatusBadRequest)
 			return
 		}
-		if !wait(r, *firstTokenDelay) { return }
-		if req.Stream { serveStream(w, r, req.Model, *tokenDelay); return }
+		if !wait(r, *firstTokenDelay) {
+			return
+		}
+		if req.Stream {
+			serveStream(w, r, req.Model, *tokenDelay)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": "chatcmpl-mock", "object": "chat.completion", "model": req.Model,
 			"choices": []map[string]any{{"index": 0, "message": map[string]string{"role": "assistant", "content": "hello from mock"}, "finish_reason": "stop"}},
-			"usage": map[string]int{"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11},
+			"usage":   map[string]int{"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11},
 		})
 	})
 
@@ -47,7 +52,10 @@ func main() {
 
 func serveStream(w http.ResponseWriter, r *http.Request, model string, delay time.Duration) {
 	flusher, ok := w.(http.Flusher)
-	if !ok { http.Error(w, "streaming unsupported", http.StatusInternalServerError); return }
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	for i, token := range []string{"hello", " ", "from", " ", "mock"} {
@@ -55,7 +63,9 @@ func serveStream(w http.ResponseWriter, r *http.Request, model string, delay tim
 		b, _ := json.Marshal(chunk)
 		fmt.Fprintf(w, "data: %s\n\n", b)
 		flusher.Flush()
-		if i < 4 && !wait(r, delay) { return }
+		if i < 4 && !wait(r, delay) {
+			return
+		}
 	}
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flusher.Flush()
@@ -63,7 +73,9 @@ func serveStream(w http.ResponseWriter, r *http.Request, model string, delay tim
 
 func wait(r *http.Request, delay time.Duration) bool {
 	select {
-	case <-time.After(delay): return true
-	case <-r.Context().Done(): return false
+	case <-time.After(delay):
+		return true
+	case <-r.Context().Done():
+		return false
 	}
 }

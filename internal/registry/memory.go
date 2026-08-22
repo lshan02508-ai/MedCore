@@ -108,13 +108,19 @@ func (r *Memory) Available(model string) []WorkerSnapshot {
 }
 
 func (r *Memory) MarkHealthy(workerID string, checkedAt time.Time) error {
+	return r.RecordHealthSuccess(workerID, checkedAt, true)
+}
+
+func (r *Memory) RecordHealthSuccess(workerID string, checkedAt time.Time, markHealthy bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state, exists := r.workers[workerID]
 	if !exists {
 		return fmt.Errorf("%w: %s", ErrWorkerNotFound, workerID)
 	}
-	state.health = HealthHealthy
+	if markHealthy {
+		state.health = HealthHealthy
+	}
 	state.consecutiveFailures = 0
 	state.lastCheckedAt = checkedAt
 	state.lastFailure = ""
@@ -122,13 +128,19 @@ func (r *Memory) MarkHealthy(workerID string, checkedAt time.Time) error {
 }
 
 func (r *Memory) MarkUnhealthy(workerID, reason string, checkedAt time.Time) error {
+	return r.RecordHealthFailure(workerID, reason, checkedAt, true)
+}
+
+func (r *Memory) RecordHealthFailure(workerID, reason string, checkedAt time.Time, markUnhealthy bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state, exists := r.workers[workerID]
 	if !exists {
 		return fmt.Errorf("%w: %s", ErrWorkerNotFound, workerID)
 	}
-	state.health = HealthUnhealthy
+	if markUnhealthy {
+		state.health = HealthUnhealthy
+	}
 	state.consecutiveFailures++
 	state.lastCheckedAt = checkedAt
 	state.lastFailure = reason
@@ -181,6 +193,7 @@ func snapshotOf(state *workerState) WorkerSnapshot {
 	return WorkerSnapshot{
 		Worker:              worker,
 		Health:              health,
+		ObservedHealth:      state.health,
 		InflightRequests:    state.inflight.Load(),
 		ConsecutiveFailures: state.consecutiveFailures,
 		LastCheckedAt:       state.lastCheckedAt,
