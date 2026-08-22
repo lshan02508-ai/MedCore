@@ -25,29 +25,22 @@ workload_classification:
   allow_client_hint: false
   realtime_max_input_bytes: 4096
   realtime_max_output_tokens: 256
-  long_context_min_input_bytes: 32768
+  long_context_min_input_bytes: 12288
   batch_min_output_tokens: 2048
 
 token_budget:
   allow_client_task_hint: false
   bytes_per_token: 3
   message_overhead_tokens: 4
-  default_context_window_tokens: 32768
+  default_context_window_tokens: 8192
   default_output_tokens: 1024
-  task_output_tokens:
-    qa: 256
-    extraction: 512
-    summarization: 1024
-    code_generation: 2048
-    reasoning: 4096
-    tool_use: 1024
   workload_output_tokens:
     realtime: 256
     interactive: 1024
     long_context: 1024
     batch: 4096
   model_context_window_tokens:
-    mock-model: 32768
+    all-task: 8192
 
 scheduler:
   queue_capacity: 500
@@ -68,12 +61,13 @@ scheduler:
     batch: ""
 
 model_pools:
-  mock:
-    model: mock-model
-    max_inflight_cost: 100000
+  all-task:
+    model: all-task
+    max_inflight_cost: 50000
     workers:
-      - id: mock-1
-        endpoint: http://localhost:8000
-        max_concurrency: 20
+      - id: all-task-1
+        endpoint: http://127.0.0.1:8889
+        api_key: ""
+        max_concurrency: 2
         max_inflight_cost: 50000
         initial_service_rate: 3000
