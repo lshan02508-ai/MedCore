@@ -1,6 +1,7 @@
 /bin/
 /dist/
 /coverage.out
+*_test.go
 *.log
 .idea/
 .vscode/

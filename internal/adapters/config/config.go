@@ -15,16 +15,17 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Listen             string `json:"listen"`
+	Listen              string `json:"listen"`
 	MaxRequestBodyBytes int64  `json:"max_request_body_bytes"`
-	ReadHeaderTimeout  string `json:"read_header_timeout"`
-	RequestTimeout     string `json:"request_timeout"`
-	ShutdownTimeout    string `json:"shutdown_timeout"`
+	ReadHeaderTimeout   string `json:"read_header_timeout"`
+	RequestTimeout      string `json:"request_timeout"`
+	ShutdownTimeout     string `json:"shutdown_timeout"`
 }
 
 type BackendConfig struct {
 	BaseURL               string `json:"base_url"`
 	APIKey                string `json:"api_key"`
+	ReadinessTimeout      string `json:"readiness_timeout"`
 	ResponseHeaderTimeout string `json:"response_header_timeout"`
 	IdleConnTimeout       string `json:"idle_conn_timeout"`
 	MaxIdleConns          int    `json:"max_idle_conns"`
@@ -36,6 +37,7 @@ type Runtime struct {
 	ReadHeaderTimeout     time.Duration
 	RequestTimeout        time.Duration
 	ShutdownTimeout       time.Duration
+	ReadinessTimeout      time.Duration
 	ResponseHeaderTimeout time.Duration
 	IdleConnTimeout       time.Duration
 }
@@ -70,6 +72,7 @@ func (c Config) Validate() (Runtime, error) {
 	c.Server.ReadHeaderTimeout = defaultString(c.Server.ReadHeaderTimeout, "5s")
 	c.Server.RequestTimeout = defaultString(c.Server.RequestTimeout, "10m")
 	c.Server.ShutdownTimeout = defaultString(c.Server.ShutdownTimeout, "30s")
+	c.Backend.ReadinessTimeout = defaultString(c.Backend.ReadinessTimeout, "2s")
 	c.Backend.ResponseHeaderTimeout = defaultString(c.Backend.ResponseHeaderTimeout, "30s")
 	c.Backend.IdleConnTimeout = defaultString(c.Backend.IdleConnTimeout, "90s")
 	if c.Backend.MaxIdleConns == 0 {
@@ -80,18 +83,32 @@ func (c Config) Validate() (Runtime, error) {
 	}
 
 	readHeader, err := positiveDuration("server.read_header_timeout", c.Server.ReadHeaderTimeout)
-	if err != nil { return Runtime{}, err }
+	if err != nil {
+		return Runtime{}, err
+	}
 	request, err := positiveDuration("server.request_timeout", c.Server.RequestTimeout)
-	if err != nil { return Runtime{}, err }
+	if err != nil {
+		return Runtime{}, err
+	}
 	shutdown, err := positiveDuration("server.shutdown_timeout", c.Server.ShutdownTimeout)
-	if err != nil { return Runtime{}, err }
+	if err != nil {
+		return Runtime{}, err
+	}
+	readiness, err := positiveDuration("backend.readiness_timeout", c.Backend.ReadinessTimeout)
+	if err != nil {
+		return Runtime{}, err
+	}
 	responseHeader, err := positiveDuration("backend.response_header_timeout", c.Backend.ResponseHeaderTimeout)
-	if err != nil { return Runtime{}, err }
+	if err != nil {
+		return Runtime{}, err
+	}
 	idle, err := positiveDuration("backend.idle_conn_timeout", c.Backend.IdleConnTimeout)
-	if err != nil { return Runtime{}, err }
+	if err != nil {
+		return Runtime{}, err
+	}
 
 	c.Backend.BaseURL = strings.TrimRight(c.Backend.BaseURL, "/")
-	return Runtime{Config: c, ReadHeaderTimeout: readHeader, RequestTimeout: request, ShutdownTimeout: shutdown, ResponseHeaderTimeout: responseHeader, IdleConnTimeout: idle}, nil
+	return Runtime{Config: c, ReadHeaderTimeout: readHeader, RequestTimeout: request, ShutdownTimeout: shutdown, ReadinessTimeout: readiness, ResponseHeaderTimeout: responseHeader, IdleConnTimeout: idle}, nil
 }
 
 func positiveDuration(name, value string) (time.Duration, error) {
@@ -103,6 +120,8 @@ func positiveDuration(name, value string) (time.Duration, error) {
 }
 
 func defaultString(value, fallback string) string {
-	if value == "" { return fallback }
+	if value == "" {
+		return fallback
+	}
 	return value
 }

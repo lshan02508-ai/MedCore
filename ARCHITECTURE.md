@@ -41,6 +41,10 @@ Response bodies are always closed by the proxy. The incoming body is wrapped wit
 
 Exact time-to-first-SSE-token and between-token idle deadlines require a stream-aware timeout layer and are planned for the next proxy iteration.
 
+## Health and readiness
+
+`/healthz` reports process liveness and does not depend on an inference backend. `/readyz` performs a bounded, authenticated `GET /v1/models` probe against the configured OpenAI-compatible backend. A failed, timed-out, or non-2xx probe returns `503`, allowing an orchestrator to stop routing inference traffic through an unavailable gateway instance.
+
 ## Next architecture increment
 
 The next increment inserts normalized request metadata, a bounded queue, capacity leases, and admission decisions before the backend transport. The proxy and backend interfaces remain responsible for HTTP semantics and cancellation.

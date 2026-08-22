@@ -7,7 +7,7 @@
 | `POST` | `/v1/chat/completions` | Transparently proxies JSON and SSE responses |
 | `GET` | `/v1/models` | Transparently proxies the backend model list |
 | `GET` | `/healthz` | Gateway process liveness |
-| `GET` | `/readyz` | Gateway configuration readiness |
+| `GET` | `/readyz` | Returns `200` when the configured backend `/v1/models` endpoint is reachable, otherwise `503` |
 | `GET` | `/metrics` | Prometheus text exposition |
 
 The proxy intentionally does not decode and rebuild Chat Completions payloads. This preserves optional and backend-specific request fields. It removes hop-by-hop HTTP headers and adds standard forwarding headers.
@@ -51,6 +51,5 @@ Backend status codes and response bodies pass through unchanged.
 
 - No authentication or tenant policy enforcement yet;
 - no token-aware admission or scheduling yet;
-- `/readyz` does not actively probe backend health yet;
 - streaming idle timeout and exact first-token timeout are not yet implemented;
 - OpenAI Responses, Completions, and Embeddings APIs are not yet implemented.
