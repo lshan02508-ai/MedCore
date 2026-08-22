@@ -28,7 +28,7 @@ func NewHandler(cfg config.Runtime, logger *slog.Logger) (http.Handler, error) {
 	}
 	metrics := &telemetry.Metrics{}
 	client := &http.Client{Transport: transport}
-	p, err := proxy.New(proxy.Options{BackendURL: cfg.Backend.BaseURL, APIKey: cfg.Backend.APIKey, Client: client, MaxBodyBytes: cfg.Server.MaxRequestBodyBytes, RequestTimeout: cfg.RequestTimeout, Logger: logger, Metrics: metrics})
+	p, err := proxy.New(proxy.Options{BackendURL: cfg.Backend.BaseURL, APIKey: cfg.Backend.APIKey, Client: client, MaxBodyBytes: cfg.Server.MaxRequestBodyBytes, RequestTimeout: cfg.RequestTimeout, FirstTokenTimeout: cfg.FirstTokenTimeout, StreamIdleTimeout: cfg.StreamIdleTimeout, Logger: logger, Metrics: metrics})
 	if err != nil {
 		return nil, err
 	}

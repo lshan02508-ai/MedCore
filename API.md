@@ -16,6 +16,8 @@ The proxy intentionally does not decode and rebuild Chat Completions payloads. T
 
 Responses with `Content-Type: text/event-stream` are copied incrementally and flushed after every upstream read. The gateway does not parse or buffer the complete event stream.
 
+The gateway waits up to `first_token_timeout` for the first SSE bytes before committing the backend response headers to the client. A timeout at this stage returns an OpenAI-shaped `504` error. After streaming begins, every received block resets `stream_idle_timeout`; an idle timeout cancels the backend request and terminates the already-committed stream.
+
 Once response headers or tokens have been sent, the gateway cannot replace the response with a JSON error. Mid-stream backend failures therefore appear as a terminated stream.
 
 ## Cancellation
@@ -42,6 +44,7 @@ Current mappings:
 |---|---:|---|
 | Backend unavailable | `502` | `upstream_error` |
 | Gateway/backend deadline | `504` | `upstream_timeout` |
+| First SSE data timeout | `504` | `first_token_timeout` |
 | Request canceled before response | `499` | `request_canceled` |
 | Internal request construction failure | `500` | `gateway_error` |
 
@@ -51,5 +54,4 @@ Backend status codes and response bodies pass through unchanged.
 
 - No authentication or tenant policy enforcement yet;
 - no token-aware admission or scheduling yet;
-- streaming idle timeout and exact first-token timeout are not yet implemented;
 - OpenAI Responses, Completions, and Embeddings APIs are not yet implemented.

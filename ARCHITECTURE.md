@@ -35,11 +35,13 @@ Response bodies are always closed by the proxy. The incoming body is wrapped wit
 
 - `read_header_timeout`: protects the gateway HTTP server while reading headers;
 - `response_header_timeout`: limits the time waiting for backend response headers;
+- `first_token_timeout`: limits the wait for the first SSE response bytes after backend headers arrive;
+- `stream_idle_timeout`: limits silence between SSE response reads after streaming begins;
 - `request_timeout`: limits the complete request, including a stream;
 - `shutdown_timeout`: bounds graceful draining;
 - `idle_conn_timeout`: controls pooled idle backend connections, not request execution.
 
-Exact time-to-first-SSE-token and between-token idle deadlines require a stream-aware timeout layer and are planned for the next proxy iteration.
+For SSE responses, backend headers are held until the first response bytes arrive. This allows a first-token timeout to return a structured `504` before the downstream response is committed. After the first bytes are flushed, an idle timeout can only cancel the backend and terminate the stream because HTTP status and headers can no longer be replaced.
 
 ## Health and readiness
 

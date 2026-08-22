@@ -26,6 +26,8 @@ type BackendConfig struct {
 	BaseURL               string `json:"base_url"`
 	APIKey                string `json:"api_key"`
 	ReadinessTimeout      string `json:"readiness_timeout"`
+	FirstTokenTimeout     string `json:"first_token_timeout"`
+	StreamIdleTimeout     string `json:"stream_idle_timeout"`
 	ResponseHeaderTimeout string `json:"response_header_timeout"`
 	IdleConnTimeout       string `json:"idle_conn_timeout"`
 	MaxIdleConns          int    `json:"max_idle_conns"`
@@ -38,6 +40,8 @@ type Runtime struct {
 	RequestTimeout        time.Duration
 	ShutdownTimeout       time.Duration
 	ReadinessTimeout      time.Duration
+	FirstTokenTimeout     time.Duration
+	StreamIdleTimeout     time.Duration
 	ResponseHeaderTimeout time.Duration
 	IdleConnTimeout       time.Duration
 }
@@ -73,6 +77,8 @@ func (c Config) Validate() (Runtime, error) {
 	c.Server.RequestTimeout = defaultString(c.Server.RequestTimeout, "10m")
 	c.Server.ShutdownTimeout = defaultString(c.Server.ShutdownTimeout, "30s")
 	c.Backend.ReadinessTimeout = defaultString(c.Backend.ReadinessTimeout, "2s")
+	c.Backend.FirstTokenTimeout = defaultString(c.Backend.FirstTokenTimeout, "30s")
+	c.Backend.StreamIdleTimeout = defaultString(c.Backend.StreamIdleTimeout, "30s")
 	c.Backend.ResponseHeaderTimeout = defaultString(c.Backend.ResponseHeaderTimeout, "30s")
 	c.Backend.IdleConnTimeout = defaultString(c.Backend.IdleConnTimeout, "90s")
 	if c.Backend.MaxIdleConns == 0 {
@@ -98,6 +104,14 @@ func (c Config) Validate() (Runtime, error) {
 	if err != nil {
 		return Runtime{}, err
 	}
+	firstToken, err := positiveDuration("backend.first_token_timeout", c.Backend.FirstTokenTimeout)
+	if err != nil {
+		return Runtime{}, err
+	}
+	streamIdle, err := positiveDuration("backend.stream_idle_timeout", c.Backend.StreamIdleTimeout)
+	if err != nil {
+		return Runtime{}, err
+	}
 	responseHeader, err := positiveDuration("backend.response_header_timeout", c.Backend.ResponseHeaderTimeout)
 	if err != nil {
 		return Runtime{}, err
@@ -108,7 +122,7 @@ func (c Config) Validate() (Runtime, error) {
 	}
 
 	c.Backend.BaseURL = strings.TrimRight(c.Backend.BaseURL, "/")
-	return Runtime{Config: c, ReadHeaderTimeout: readHeader, RequestTimeout: request, ShutdownTimeout: shutdown, ReadinessTimeout: readiness, ResponseHeaderTimeout: responseHeader, IdleConnTimeout: idle}, nil
+	return Runtime{Config: c, ReadHeaderTimeout: readHeader, RequestTimeout: request, ShutdownTimeout: shutdown, ReadinessTimeout: readiness, FirstTokenTimeout: firstToken, StreamIdleTimeout: streamIdle, ResponseHeaderTimeout: responseHeader, IdleConnTimeout: idle}, nil
 }
 
 func positiveDuration(name, value string) (time.Duration, error) {

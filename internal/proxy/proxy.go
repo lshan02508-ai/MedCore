@@ -16,23 +16,27 @@ import (
 )
 
 type Proxy struct {
-	backend        *url.URL
-	apiKey         string
-	client         *http.Client
-	maxBodyBytes   int64
-	requestTimeout time.Duration
-	logger         *slog.Logger
-	metrics        *telemetry.Metrics
+	backend           *url.URL
+	apiKey            string
+	client            *http.Client
+	maxBodyBytes      int64
+	requestTimeout    time.Duration
+	firstTokenTimeout time.Duration
+	streamIdleTimeout time.Duration
+	logger            *slog.Logger
+	metrics           *telemetry.Metrics
 }
 
 type Options struct {
-	BackendURL     string
-	APIKey         string
-	Client         *http.Client
-	MaxBodyBytes   int64
-	RequestTimeout time.Duration
-	Logger         *slog.Logger
-	Metrics        *telemetry.Metrics
+	BackendURL        string
+	APIKey            string
+	Client            *http.Client
+	MaxBodyBytes      int64
+	RequestTimeout    time.Duration
+	FirstTokenTimeout time.Duration
+	StreamIdleTimeout time.Duration
+	Logger            *slog.Logger
+	Metrics           *telemetry.Metrics
 }
 
 func New(opts Options) (*Proxy, error) {
@@ -52,7 +56,13 @@ func New(opts Options) (*Proxy, error) {
 	if opts.MaxBodyBytes <= 0 {
 		opts.MaxBodyBytes = 32 << 20
 	}
-	return &Proxy{backend: u, apiKey: opts.APIKey, client: opts.Client, maxBodyBytes: opts.MaxBodyBytes, requestTimeout: opts.RequestTimeout, logger: opts.Logger, metrics: opts.Metrics}, nil
+	if opts.FirstTokenTimeout <= 0 {
+		opts.FirstTokenTimeout = 30 * time.Second
+	}
+	if opts.StreamIdleTimeout <= 0 {
+		opts.StreamIdleTimeout = 30 * time.Second
+	}
+	return &Proxy{backend: u, apiKey: opts.APIKey, client: opts.Client, maxBodyBytes: opts.MaxBodyBytes, requestTimeout: opts.RequestTimeout, firstTokenTimeout: opts.FirstTokenTimeout, streamIdleTimeout: opts.StreamIdleTimeout, logger: opts.Logger, metrics: opts.Metrics}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +74,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var cancel context.CancelFunc
 	if p.requestTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, p.requestTimeout)
-		defer cancel()
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
 	}
+	defer cancel()
 
 	target := *p.backend
 	target.Path = joinPath(p.backend.Path, r.URL.Path)
@@ -91,41 +103,138 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	copyHeaders(w.Header(), resp.Header)
-	w.Header().Set("X-GoLLM-Upstream", p.backend.Host)
-	w.WriteHeader(resp.StatusCode)
 
 	if isSSE(resp.Header) {
-		if err := stream(w, resp.Body); err != nil {
-			p.logger.Debug("stream ended", "path", r.URL.Path, "error", err)
+		committed, streamErr := stream(ctx, cancel, w, resp, p.backend.Host, p.firstTokenTimeout, p.streamIdleTimeout)
+		if streamErr != nil {
+			p.handleStreamError(w, r, committed, streamErr)
 			return
 		}
-	} else if _, err := io.Copy(w, resp.Body); err != nil {
+		failed = resp.StatusCode >= 500
+		return
+	}
+
+	commitUpstreamResponse(w, resp, p.backend.Host)
+	if _, err := io.Copy(w, resp.Body); err != nil {
 		p.logger.Debug("response copy failed", "path", r.URL.Path, "error", err)
 		return
 	}
 	failed = resp.StatusCode >= 500
 }
 
-func stream(w http.ResponseWriter, src io.Reader) error {
+var (
+	errFirstTokenTimeout = errors.New("stream first token timeout")
+	errStreamIdleTimeout = errors.New("stream idle timeout")
+)
+
+type streamRead struct {
+	data []byte
+	err  error
+}
+
+func stream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, resp *http.Response, upstreamHost string, firstTokenTimeout, idleTimeout time.Duration) (bool, error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return errors.New("response writer does not support streaming")
+		return false, errors.New("response writer does not support streaming")
 	}
+
+	reads := make(chan streamRead, 1)
+	go readStream(ctx, resp.Body, reads)
+
+	timer := time.NewTimer(firstTokenTimeout)
+	defer timer.Stop()
+	committed := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			return committed, ctx.Err()
+		case <-timer.C:
+			cancel()
+			if committed {
+				return true, errStreamIdleTimeout
+			}
+			return false, errFirstTokenTimeout
+		case result := <-reads:
+			if len(result.data) > 0 {
+				if !committed {
+					commitUpstreamResponse(w, resp, upstreamHost)
+					committed = true
+				}
+				if _, err := w.Write(result.data); err != nil {
+					return committed, err
+				}
+				flusher.Flush()
+				resetTimer(timer, idleTimeout)
+			}
+			if result.err != nil {
+				if errors.Is(result.err, io.EOF) {
+					if !committed {
+						commitUpstreamResponse(w, resp, upstreamHost)
+						committed = true
+					}
+					return committed, nil
+				}
+				return committed, result.err
+			}
+		}
+	}
+}
+
+func readStream(ctx context.Context, src io.Reader, reads chan<- streamRead) {
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := src.Read(buf)
+		if n == 0 && err == nil {
+			continue
+		}
+		result := streamRead{err: err}
 		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return writeErr
-			}
-			flusher.Flush()
+			result.data = append([]byte(nil), buf[:n]...)
+		}
+		select {
+		case reads <- result:
+		case <-ctx.Done():
+			return
 		}
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
+			return
+		}
+	}
+}
+
+func resetTimer(timer *time.Timer, timeout time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(timeout)
+}
+
+func commitUpstreamResponse(w http.ResponseWriter, resp *http.Response, upstreamHost string) {
+	copyHeaders(w.Header(), resp.Header)
+	w.Header().Set("X-GoLLM-Upstream", upstreamHost)
+	w.WriteHeader(resp.StatusCode)
+}
+
+func (p *Proxy) handleStreamError(w http.ResponseWriter, r *http.Request, committed bool, err error) {
+	switch {
+	case errors.Is(err, errFirstTokenTimeout):
+		p.metrics.FirstTokenTimeout()
+		p.logger.Warn("stream first token timeout", "path", r.URL.Path, "timeout", p.firstTokenTimeout)
+		if !committed {
+			writeOpenAIError(w, http.StatusGatewayTimeout, "first_token_timeout", "the inference backend did not produce a first token in time")
+		}
+	case errors.Is(err, errStreamIdleTimeout):
+		p.metrics.StreamIdleTimeout()
+		p.logger.Warn("stream idle timeout", "path", r.URL.Path, "timeout", p.streamIdleTimeout)
+	default:
+		p.logger.Debug("stream ended", "path", r.URL.Path, "error", err)
+		if !committed {
+			status, code, message := upstreamError(err)
+			writeOpenAIError(w, status, code, message)
 		}
 	}
 }
