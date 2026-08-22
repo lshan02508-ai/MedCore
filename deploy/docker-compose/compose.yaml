@@ -1,0 +1,19 @@
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["-config", "/etc/gollm/gateway.json"]
+    volumes:
+      - ./gateway.docker.json:/etc/gollm/gateway.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mock-backend
+
+  mock-backend:
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/mock.Dockerfile
+    ports:
+      - "8000:8000"
