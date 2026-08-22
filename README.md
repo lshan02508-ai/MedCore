@@ -170,10 +170,6 @@ make race
 make build
 ```
 
-## Status
-
-This repository is under active development and has not reached a stable release. Public API and configuration compatibility are not yet guaranteed.
-
 ## License
 
 Apache License 2.0.
