@@ -1,9 +1,11 @@
-/bin/
-/dist/
-/coverage.out
-*_test.go
-*.md
-!/README.md
-*.log
-.idea/
-.vscode/
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
