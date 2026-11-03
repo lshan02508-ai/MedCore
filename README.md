@@ -1,416 +1,284 @@
-<div align="center">
+<h1 align="center">🩺 MedCore</h1>
+<h3 align="center">让健康科普回答有据可查</h3>
 
-# 🩺 MedCore
-
-### 有依据、可追溯的健康科普后端
-
-**多会话管理 · 按需医学检索 · 流式 AI 回答**
-
-<p>
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white">
-  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-API-009688?style=for-the-badge&logo=fastapi&logoColor=white">
-  <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-Workflow-5746AF?style=for-the-badge">
-  <img alt="MySQL" src="https://img.shields.io/badge/MySQL-Database-4479A1?style=for-the-badge&logo=mysql&logoColor=white">
+<p align="center">
+  <strong>面向普通用户的中文医学知识问答后端</strong><br/>
+  检索增强生成（RAG） · LangGraph 工作流 · 流式回答 · 可复现的检索评测
 </p>
 
-<p>
-  <img alt="BGE-M3" src="https://img.shields.io/badge/Embedding-BGE--M3-FF6F00?style=flat-square">
-  <img alt="Milvus" src="https://img.shields.io/badge/Vector_DB-Milvus-00A1EA?style=flat-square">
-  <img alt="DeepSeek" src="https://img.shields.io/badge/LLM-DeepSeek-4D6BFE?style=flat-square">
-  <img alt="Stage MVP" src="https://img.shields.io/badge/Stage-MVP-6B7280?style=flat-square">
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-Workflow-5746AF?style=flat-square" />
+  <img alt="Milvus" src="https://img.shields.io/badge/Milvus-Vector_DB-00A1EA?style=flat-square" />
+  <img alt="BGE-M3" src="https://img.shields.io/badge/Embedding-BGE--M3-F97316?style=flat-square" />
+  <img alt="DeepSeek" src="https://img.shields.io/badge/LLM-DeepSeek-4D6BFE?style=flat-square" />
 </p>
 
-[快速开始](#-快速开始) · [系统架构](#-系统架构) · [能力边界](#-能力与边界) · [RAG 实验](#-rag-离线实验) · [接口](#-接口概览)
-
-</div>
+<p align="center">
+  <a href="#项目亮点">项目亮点</a> · <a href="#架构设计">架构设计</a> · <a href="#检索实验">检索实验</a> · <a href="#快速开始">快速开始</a> · <a href="#接口概览">接口</a> · <a href="#当前状态与开发计划">开发计划</a>
+</p>
 
 ---
 
-MedCore 面向普通用户提供中文健康科普服务。系统结合会话历史理解问题，按需查询本地医学知识库或联网搜索，再由 DeepSeek 生成带来源的回答。项目当前处于 MVP 阶段，目标是建立一条**可测试、可追踪、可持续迭代**的问答链路。
+> **为什么做 MedCore？**  通用大模型可以流畅地回答医学问题，但回答可能缺少依据，涉及药品、疾病和检查指标时尤其需要区分模型生成内容与可检索的知识。MedCore 将**医学证据检索、对话工作流、回答生成和结果追踪**拆成可测试的环节，重点研究如何让中文医学知识问答更可靠、更可评估。
 
 > [!IMPORTANT]
-> MedCore 用于健康知识科普，不能替代医生诊断、处方或急救服务。遇到危急症状时，请立即联系当地急救机构或前往医疗机构。
+> **使用边界**：MedCore 当前提供医学知识科普，不提供疾病诊断、个体化处方或急救决策。现阶段的引用编号不等于已完成逐句事实核验；检索相关性高也不代表医学内容一定准确。
 
-## ✨ 核心能力
+## 项目亮点
 
 <table>
   <tr>
-    <td align="center" width="25%">
-      <strong>💬 多轮会话</strong><br>
-      <sub>JWT 鉴权、会话隔离<br>历史消息持久化</sub>
-    </td>
-    <td align="center" width="25%">
-      <strong>🔎 按需检索</strong><br>
-      <sub>本地医学 RAG<br>Tavily 联网搜索</sub>
-    </td>
-    <td align="center" width="25%">
-      <strong>⚡ 流式回答</strong><br>
-      <sub>SSE 状态事件<br>回答增量实时返回</sub>
-    </td>
-    <td align="center" width="25%">
-      <strong>📚 来源追踪</strong><br>
-      <sub>仅展示实际引用来源<br>保留检索证据</sub>
-    </td>
+    <td align="center"><strong>229,457</strong><br/><sub>CMedTEB 检索语料</sub></td>
+    <td align="center"><strong>734</strong><br/><sub>标准测试问题</sub></td>
+    <td align="center"><strong>84.88%</strong><br/><sub>Rerank 后 Hit@5</sub></td>
+    <td align="center"><strong>+4.09 pp</strong><br/><sub>相对 Dense 的 Hit@5 提升</sub></td>
   </tr>
 </table>
 
-| 项目 | 当前实现 |
-| :--- | :--- |
-| 核心场景 | 健康科普、多轮问答、医学知识检索 |
-| 后端技术 | Python 3.11+ · FastAPI · LangGraph · SQLAlchemy · MySQL |
-| 模型与工具 | DeepSeek · BGE-M3 · BGE Reranker · Milvus · Tavily |
-| 交互方式 | REST API + SSE 流式响应 |
-| 工程范围 | 后端 API、工作流、数据库迁移、自动化测试、离线 RAG 实验 |
+**01 · 把 RAG 做成可量化的检索工程，而不只是一次向量查询**  
+使用 CMedTEB 的 Corpus / Queries / Qrels 建立离线检索评测流程。围绕 **BGE-M3 Dense、字符 n-gram BM25、BGE Reranker v2 M3** 对比 Hit Rate、Recall、MRR、nDCG，并保存可追查的测试明细。
 
-## 🚀 快速开始
+**02 · 检索与业务解耦**  
+医学检索由独立 RAG 组件承载；FastAPI 负责鉴权、会话和对外 API，LangGraph 负责按需选择本地知识、联网搜索或直接回答。离线实验目录与在线检索服务职责明确分离。
 
-### 1. 准备环境
+**03 · 流式交互与会话持久化**  
+支持 JWT 鉴权、多会话隔离和消息历史查询；通过 SSE 返回工作流状态与回答增量，完整生成后持久化消息，避免把未完成回复当作正常回答保存。
 
-需要预先安装 Python 3.11+、[uv](https://docs.astral.sh/uv/) 和 MySQL。在项目目录执行：
+**04 · 对生成内容保留边界意识**  
+检索结果附带来源信息；展示实际引用的来源编号，但不把“引用存在”当作“事实得到证明”。医学安全评测、逐句证据核验和失败补检属于后续重点。
+
+## 架构设计
+
+```mermaid
+flowchart TB
+    U["用户 / 前端"] -->|"REST · SSE"| API["FastAPI · 鉴权 / 会话 / 消息"]
+    API <--> DB[("MySQL · SQLAlchemy")]
+    API --> G["LangGraph · 健康科普工作流"]
+    G --> ROUTE{"需要外部知识？"}
+    ROUTE -->|"本地医学知识"| RAG["独立 RAG Service"]
+    ROUTE -->|"需要最新信息"| WEB["Tavily Search"]
+    ROUTE -->|"无需外部检索"| LLM["DeepSeek"]
+    RAG --> LLM
+    WEB --> LLM
+    LLM -->|"增量生成"| API
+    RAG --> MILVUS[("Milvus · 向量检索")]
+
+    classDef core fill:#e7f6f3,stroke:#0d9488,color:#0f172a;
+    classDef infra fill:#eef2ff,stroke:#6366f1,color:#0f172a;
+    class API,G,ROUTE core;
+    class DB,MILVUS,RAG,WEB,LLM infra;
+```
+
+**一个问题如何被处理？** 用户请求先进入鉴权与会话层，工作流结合上下文判断是否需要外部知识；检索得到的证据与对话历史一起交给模型生成，服务端再通过 SSE 持续返回内容。当前属于**受控工具选择工作流**，不是支持无限轮自主检索的 Agent。
+
+## 检索实验
+
+这是 MedCore 当前最重点的工程模块。与直接拿模型给参考答案打分不同，CMedTEB 提供**文档 ID 级相关性标注（qrels）**，可直接复现检索指标。
+
+### 数据与流水线
+
+| 内容 | 配置 |
+| --- | --- |
+| 数据集 | [CMedTEB](https://huggingface.co/datasets/PhilipGAQ/CMedTEB) |
+| Corpus | 229,457 篇中文医疗文档 |
+| 测试集 | 734 条 Query |
+| 相关性标注 | 329,578 条 qrels 记录，具体相关等级以标签为准 |
+| Dense | BGE-M3 · 1024 维 · Milvus IP |
+| 文档组织 | 自然边界切分，约 1,000 字符 / 100 字符重叠，结果回聚合至原始文档 ID |
+| Sparse 基线 | BM25 · character 2–3 gram（独立本地索引） |
+| 精排 | BGE Reranker v2 M3 · 最大输入长度 512 |
+
+```mermaid
+flowchart LR
+    DATA["CMedTEB Corpus"] --> CHUNK["文档解析 / Chunk"]
+    CHUNK --> EMB["BGE-M3"]
+    EMB --> VDB[("Milvus Dense Index")]
+    DATA --> BM["BM25 · char 2–3 gram"]
+    VDB --> CAND["Dense 候选 / 父文档聚合"]
+    CAND --> RR["BGE Reranker v2 M3"]
+    BM --> EVAL["Queries + Qrels 评测"]
+    CAND --> EVAL
+    RR --> EVAL
+```
+
+> 为保证官方 qrels 仍然有效，Chunk 召回结果在评测前需映射回原始 `doc_id`；不能直接把 Chunk ID 与 qrels 对比。
+
+### 实验成绩
+
+在**同一批 734 条测试问题**上比较，相关性由 CMedTEB qrels 判定。
+
+| 检索方案 | Hit@1 ↑ | Hit@5 ↑ | Recall@5 ↑ | MRR@10 ↑ | nDCG@10 ↑ |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| BM25 · char 2–3 gram | 30.25% | 52.18% | 15.61% | 0.3964 | 0.2499 |
+| BGE-M3 Dense | 59.54% | 80.79% | 30.69% | 0.6847 | 0.4694 |
+| **Dense + BGE Reranker v2 M3** | **63.90%** | **84.88%** | **34.03%** | **0.7286** | **0.5064** |
+
+**精排的实际收益（相对于 Dense 基线）：**
+
+- **Hit@5：80.79% → 84.88%（+4.09 个百分点）**，更多问题能在前五名拿到至少一篇相关文档。
+- **MRR@10：0.6847 → 0.7286（+0.0438）**，第一篇相关文档的位置更靠前。
+- **nDCG@5：0.4988 → 0.5496（+0.0508）**，前五名的整体相关性排序得到改善。
+- **Recall@100：70.92% → 70.92%（不变）**，验证了重排序无法凭空补出未进入候选集的文档。
+
+**实验设置**：先对 Dense 检索得到的前 100 个父文档候选中的前 15 个做精排；`chunk_top_k=200`、`candidate_top_k=100`、`rerank_top_k=15`。完整的 734 条 Query 实验总耗时约 309 秒，其中精排约 226 秒，批处理吞吐约 2.37 QPS。上述吞吐不等价于线上单请求延迟。
+
+> [!NOTE]
+> **如何解读指标？** Hit@5 表示前五名是否至少有一篇被标注为相关的文档；Recall@5 表示前五名找回了多少**已标注**相关文档。MRR 关注第一个相关结果的位置，nDCG 关注整体排序。它们评估的是**检索相关性**，不是模型生成答案的医学正确率。
+
+**当前发现**：Dense 在这组语料上显著优于字符 n-gram BM25；Reranker 能改善靠前排名，但无法提升候选集合的召回上限。下一步将优先测试 **Dense 与 BM25 的候选互补性、BGE-M3 Sparse、RRF 融合**，再评估扩大精排候选数量的收益与延迟成本。
+
+<details>
+<summary><strong>查看检索实验运行命令</strong></summary>
+
+先准备 `rag/` 独立环境与本地模型文件；Milvus 默认地址为 `http://localhost:19530`，Collection 为 `cmedteb_retrieval_1000`。
+
+```bash
+cd rag
+uv sync --frozen --no-install-project
+
+# 入库前检查（不加载模型、不连接 Milvus）
+.venv/bin/python src/code/cmed/ingest.py --dry-run
+
+# 向量化和 Milvus 入库
+.venv/bin/python src/code/cmed/ingest.py
+
+# Dense 检索与评测
+.venv/bin/python src/code/cmed/Dense_Retrieval/search.py \
+  --query "糖尿病患者应该如何控制饮食？" --top-k 5
+.venv/bin/python src/code/cmed/Dense_Retrieval/evaluate.py \
+  --details outputs/cmed_retrieval_details.jsonl
+
+# BM25 建索引与评测
+.venv/bin/python src/code/cmed/BM25/bm25_index.py
+.venv/bin/python src/code/cmed/BM25/evaluate.py
+
+# Reranker 评测
+.venv/bin/python src/code/cmed/rerank/evaluate.py \
+  --details outputs/cmed_rerank_details.jsonl
+```
+
+模型文件和 Milvus 数据不随仓库分发。实验前检查代码中的数据路径、模型目录及 Collection 配置。
+
+</details>
+
+## 快速开始
+
+### 1. 启动后端环境
+
+要求 **Python 3.11+、[uv](https://docs.astral.sh/uv/)、MySQL**，并为需要的 RAG / LLM / 联网能力准备对应服务与密钥。
 
 ```bash
 uv sync --frozen
 cp .env.example .env
 ```
 
-编辑 `.env`，至少填写 MySQL 连接信息、`JWT_SECRET_KEY` 和 `DEEPSEEK_API_KEY`。可以使用下面的命令生成 JWT 密钥：
+在 `.env` 中至少配置 MySQL 连接、`JWT_SECRET_KEY`、`DEEPSEEK_API_KEY`。可通过以下命令生成 JWT 密钥：
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-### 2. 初始化数据库
+### 2. 迁移数据库并启动 API
 
 ```bash
 PYTHONPATH=src .venv/bin/alembic upgrade head
-```
 
-### 3. 启动 API
-
-```bash
 PYTHONPATH=src .venv/bin/uvicorn medcore.main:app \
-  --host 127.0.0.1 \
-  --port 8089 \
-  --reload
+  --host 127.0.0.1 --port 8089 --reload
 ```
 
-服务启动后访问：
-
-- Swagger UI：<http://127.0.0.1:8089/docs>
-- OpenAPI JSON：<http://127.0.0.1:8089/openapi.json>
-
-> [!NOTE]
-> `/check_health` 当前只是占位接口，不代表数据库、模型和 RAG 服务均处于健康状态。后端默认仅监听本机，对外发布时应配置反向代理。
+启动后查看 [Swagger UI](http://127.0.0.1:8089/docs) 或 [OpenAPI JSON](http://127.0.0.1:8089/openapi.json)。默认监听本机；联调时需要单独启动在线 RAG 服务，**`rag/` 离线评测脚本并不提供 HTTP `/retrieve` 接口**。
 
 <details>
-<summary><strong>查看环境变量说明</strong></summary>
+<summary><strong>展开环境变量</strong></summary>
 
-| 配置项 | 用途 | 何时需要 |
-| :--- | :--- | :--- |
-| `MYSQL_HOST` / `MYSQL_PORT` | MySQL 地址和端口 | 启动后端前 |
-| `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` | MySQL 凭据和数据库 | 启动后端前 |
-| `JWT_SECRET_KEY` | 签发、验证访问令牌 | 注册、登录和鉴权 |
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | 工具选择与回答生成 | AI 问答 |
-| `RAG_SERVICE_URL` | 在线 RAG 服务地址，默认 `http://127.0.0.1:8091` | 本地知识检索 |
-| `RAG_SERVICE_TOKEN` | 在线 RAG 服务鉴权令牌 | 服务启用鉴权时 |
-| `RAG_TOP_K` | 本地召回数量，允许 1–10 | 调整检索规模时 |
-| `TAVILY_API_KEY` | Tavily 搜索凭据 | 联网搜索 |
+| 配置项 | 说明 |
+| --- | --- |
+| `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` | 数据库连接 |
+| `JWT_SECRET_KEY` | JWT 签发与验证 |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | 生成模型 |
+| `RAG_SERVICE_URL` | 在线 RAG 地址，默认 `http://127.0.0.1:8091` |
+| `RAG_SERVICE_TOKEN` | RAG 服务鉴权令牌（启用时） |
+| `RAG_TOP_K` | 本地知识检索数量，默认 5，可配置 1–10 |
+| `TAVILY_API_KEY` | 联网检索凭据 |
 
-不要将真实的 `.env`、数据库密码或 API Key 提交到 Git。
+请勿提交包含密钥的 `.env` 文件。`/check_health` 当前是占位接口，不代表所有外部依赖可用。
 
 </details>
 
-## 🏗️ 系统架构
+## 接口概览
 
-```mermaid
-flowchart LR
-    U([用户 / 前端]) -->|REST / SSE| API
+| 方法 | 路径 | 说明 |
+| :---: | --- | --- |
+| `POST` | `/auth/register` | 注册用户 |
+| `POST` | `/auth/login` | 登录并获得 JWT |
+| `POST` | `/api/v1/chats` | 创建会话 |
+| `GET` | `/api/v1/chats` | 查看会话列表 |
+| `GET` | `/api/v1/chats/{id}/messages` | 分页读取历史 |
+| `POST` | `/api/v1/chats/{id}/turns` | 普通问答 |
+| `POST` | `/api/v1/chats/{id}/turns/stream` | SSE 流式问答 |
+| `DELETE` | `/api/v1/chats/{id}` | 删除会话 |
 
-    subgraph CORE[MedCore API]
-        API[FastAPI<br/>鉴权与会话] --> GRAPH[LangGraph<br/>健康科普工作流]
-        API <--> DB[(MySQL)]
-        GRAPH --> ROUTER{是否需要外部知识?}
-    end
-
-    ROUTER -->|本地知识| RAG[独立 RAG Service]
-    ROUTER -->|最新信息| WEB[Tavily Search]
-    ROUTER -->|无需检索| LLM[DeepSeek]
-    RAG --> LLM
-    WEB --> LLM
-    LLM -->|回答增量| API
-
-    classDef primary fill:#e8f5e9,stroke:#009688,stroke-width:2px,color:#1f2937;
-    classDef service fill:#eef2ff,stroke:#5746af,stroke-width:2px,color:#1f2937;
-    classDef storage fill:#e3f2fd,stroke:#4479a1,stroke-width:2px,color:#1f2937;
-    class API,GRAPH,ROUTER primary;
-    class RAG,WEB,LLM service;
-    class DB storage;
-```
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as 客户端
-    participant A as FastAPI
-    participant G as LangGraph
-    participant T as 检索工具
-    participant L as DeepSeek
-
-    C->>A: 提交聊天消息
-    A->>A: 验证 JWT，读取最近历史
-    A->>G: 启动健康科普工作流
-    G->>T: 按需调用本地 RAG / Web Search
-    T-->>G: 返回证据与来源
-    G->>L: 历史 + 问题 + 检索证据
-    L-->>A: 流式生成回答
-    A-->>C: status → delta... → done
-    A->>A: 完整生成后保存本轮消息
-```
-
-### 组件边界
-
-| 组件 | 角色 | 是否独立运行 |
-| :--- | :--- | :---: |
-| `src/medcore/` | API、会话服务、LangGraph 工作流和外部服务客户端 | 否，属于主后端 |
-| `src/medcore/rag/` | 调用在线 RAG 的 HTTP 客户端 | 否，属于主后端 |
-| `rag/` | CMedTEB 离线检索、重排和评测工程 | 是，独立环境 |
-| `rag_service/` | 响应 `POST /retrieve` 的在线检索服务 | 是，独立进程 |
-| Milvus / DeepSeek / Tavily | 向量库、模型和搜索服务 | 是，外部依赖 |
-
-## 🧭 能力与边界
-
-| 能力 | 状态 | 说明 |
-| :--- | :---: | :--- |
-| 用户鉴权与多会话持久化 | ✅ 已实现 | JWT、会话隔离、历史消息分页 |
-| 本地 RAG / 联网搜索 | ✅ 已接入 | 模型按需选择，外部服务需单独配置 |
-| SSE 流式回答 | ✅ 已实现 | 返回规划、检索、生成状态及回答增量 |
-| 引用来源展示 | 🟡 初步实现 | 仅返回答案中实际出现编号的来源，尚未验证逐句支持关系 |
-| 基于结果继续补检 | ⚪ 未实现 | 当前只有一轮工具选择，不是自主循环 Agent |
-| 症状问诊与临床分诊 | ⛔ 不支持 | 不应将健康科普功能用于确定性诊断 |
-
-### 当前默认参数
-
-> 以下是代码默认值或限制，不是性能指标。
-
-| 参数 | 当前值 | 说明 |
-| :--- | :---: | :--- |
-| 参与本轮问答的历史消息 | 最近 12 条 | 尚未接入上下文压缩 |
-| 单轮检索工具调用 | 最多 2 次 | 超出限制会报错 |
-| 本地 RAG 召回数量 | 默认 5 条 | `RAG_TOP_K` 可调整为 1–10 |
-| Web Search 返回数量 | 最多 5 条 | 由工具封装控制 |
-| JWT 有效期 | 30 分钟 | 过期后需要重新登录 |
-
-## 🧪 RAG 离线实验
-
-`rag/` 是基于 [CMedTEB](rag/src/data/CMedTEB/README.md) 的中文医学检索实验工程，用于构建、比较和评测检索方案。它**不是 HTTP 服务**，不会直接响应后端发出的 `POST /retrieve`。
-
-### 实验流水线
-
-```mermaid
-flowchart LR
-    DATA[(CMedTEB<br/>229,457 篇语料)] --> SPLIT[自然边界切块<br/>1000 chars / overlap 100]
-    SPLIT --> EMB[BGE-M3<br/>1024 维向量]
-    EMB --> MILVUS[(Milvus<br/>IP Search)]
-    MILVUS --> DENSE[Dense 候选]
-    DATA --> BM25[Char 2–3 gram<br/>BM25]
-    DENSE --> RERANK[BGE Reranker<br/>候选重排]
-    BM25 --> EVAL[CMedTEB qrels<br/>标准评测]
-    DENSE --> EVAL
-    RERANK --> EVAL
-
-    classDef data fill:#e3f2fd,stroke:#4479a1,stroke-width:2px,color:#1f2937;
-    classDef model fill:#fff3e0,stroke:#ff6f00,stroke-width:2px,color:#1f2937;
-    classDef metric fill:#e8f5e9,stroke:#009688,stroke-width:2px,color:#1f2937;
-    class DATA,MILVUS data;
-    class EMB,DENSE,BM25,RERANK model;
-    class EVAL metric;
-```
-
-### 数据规模
-
-| 任务 | 训练集 | 测试集 / 评测数据 |
-| :--- | ---: | ---: |
-| Retrieval | 20,000 条共享训练数据 | 229,457 篇语料 · 734 条查询 · 329,578 条 qrels |
-| Rerank | 20,000 条共享训练数据 | 1,128 条 |
-| STS | 10,000 条 | 5,000 条 |
-
-数据许可证为 **CC BY-NC-SA 4.0**。完整统计见 [`data_stats.json`](rag/src/data/CMedTEB/data_stats.json)。
-
-### 现有实验结果
-
-下面是 `outputs/` 中 734 条查询的一次本地全量运行结果：
-
-| 方案 | Hit Rate@1 | MRR@10 | nDCG@10 | Recall@100 |
-| :--- | ---: | ---: | ---: | ---: |
-| BM25 字符 n-gram | 30.25% | 0.3964 | 0.2499 | 52.86% |
-| BGE-M3 Dense | 59.54% | 0.6847 | 0.4694 | 70.92% |
-| **Dense + BGE Reranker** | **63.76%** | **0.7242** | **0.5025** | — |
-
-> [!TIP]
-> Reranker 只重排 Dense 的前 15 个父文档，因此不会扩大候选集，也不会提高 `Hit Rate@15` 或 `Recall@15`；它主要改善正确文档的靠前排序。
-
-这些结果会受模型版本、硬件、Collection、切块方式和候选参数影响，不代表线上服务 SLA。
-
-<details>
-<summary><strong>展开：准备 RAG 实验环境</strong></summary>
-
-默认约定：
-
-| 资源 | 默认值 |
-| :--- | :--- |
-| Dense 模型 | `rag/models/bge-m3` |
-| Reranker 模型 | `rag/models/bge-reranker-v2-m3` |
-| Milvus | `http://localhost:19530` |
-| Collection | `cmedteb_retrieval_1000` |
-| Dense 切块 | 阈值 1,000 字符，上限 1,000 字符，重叠 100 字符 |
-
-模型文件和 Milvus 数据不随项目提供。`rag/` 当前没有可安装的包入口，使用 `--no-install-project` 创建独立环境：
-
-```bash
-cd rag
-uv sync --frozen --no-install-project
-```
-
-先执行不加载模型、不连接 Milvus 的数据校验：
-
-```bash
-.venv/bin/python src/code/cmed/ingest.py --dry-run
-```
-
-</details>
-
-<details>
-<summary><strong>展开：Dense 入库、检索与评测</strong></summary>
-
-```bash
-# 切块、向量化并写入 Milvus
-.venv/bin/python src/code/cmed/ingest.py
-
-# 单条检索
-.venv/bin/python src/code/cmed/Dense_Retrieval/search.py \
-  --query "糖尿病患者应该如何控制饮食？" \
-  --top-k 5
-
-# 734 条查询的完整评测
-.venv/bin/python src/code/cmed/Dense_Retrieval/evaluate.py \
-  --details outputs/cmed_retrieval_details.jsonl
-```
-
-</details>
-
-<details>
-<summary><strong>展开：BM25 构建、检索与评测</strong></summary>
-
-BM25 不依赖 Milvus 或模型，但需要先构建本地索引：
-
-```bash
-.venv/bin/python src/code/cmed/BM25/bm25_index.py
-
-.venv/bin/python src/code/cmed/BM25/search.py \
-  "糖尿病患者应该如何控制饮食？" \
-  --top-k 5
-
-.venv/bin/python src/code/cmed/BM25/evaluate.py
-```
-
-</details>
-
-<details>
-<summary><strong>展开：Reranker 检索与评测</strong></summary>
-
-执行前需要准备两个模型和 Dense Collection：
-
-```bash
-.venv/bin/python src/code/cmed/rerank/search.py \
-  --query "糖尿病患者应该如何控制饮食？" \
-  --top-k 5
-
-.venv/bin/python src/code/cmed/rerank/evaluate.py \
-  --details outputs/cmed_rerank_details.jsonl
-```
-
-</details>
-
-建议先给评测命令添加 `--limit` 进行小规模冒烟测试，确认环境和参数无误后再运行全量数据。
-
-## 🔌 接口概览
-
-除注册和登录外，聊天接口均需携带请求头：
-
-```http
-Authorization: Bearer <access_token>
-```
-
-| 方法 | 路径 | 鉴权 | 作用 |
-| :---: | :--- | :---: | :--- |
-| `POST` | `/auth/register` | 否 | 注册用户 |
-| `POST` | `/auth/login` | 否 | 获取访问令牌 |
-| `POST` | `/api/v1/chats` | 是 | 创建会话 |
-| `GET` | `/api/v1/chats` | 是 | 列出会话 |
-| `GET` | `/api/v1/chats/{id}/messages` | 是 | 分页读取历史消息 |
-| `POST` | `/api/v1/chats/{id}/turns` | 是 | 非流式生成一轮对话 |
-| `POST` | `/api/v1/chats/{id}/turns/stream` | 是 | SSE 流式生成一轮对话 |
-| `DELETE` | `/api/v1/chats/{id}` | 是 | 删除会话及消息 |
-
-流式接口请求体：
+流式接口请求示例（需 `Authorization: Bearer <access_token>`）：
 
 ```json
-{
-  "content": "什么是病毒？"
-}
+{ "content": "糖尿病有哪些常见症状？" }
 ```
 
-成功时依次返回 `status`、多个 `delta` 和 `done` 事件；失败时返回 `error`，且不会保存未完成的回复。
+SSE 返回 `status`、`delta`、`done` 等事件；异常时返回 `error`，不将未完成的回答写入消息历史。
 
-## 🗂️ 项目结构
+## 工程结构
 
 ```text
 medcore/
 ├── src/medcore/
-│   ├── api/                     # HTTP 路由与鉴权依赖
-│   ├── services/                # 会话业务流程
-│   ├── repositories/            # 数据库读写
-│   ├── database/                # SQLAlchemy 模型与连接
-│   ├── workflows/education/     # LangGraph 状态、提示词与工具
-│   ├── llm/                     # DeepSeek 调用封装
-│   ├── rag/                     # 在线 RAG 服务 HTTP 客户端
-│   └── capabilities/web_search/ # 联网搜索
-├── migrations/                  # Alembic 数据库迁移
-├── tests/                       # 后端自动化测试
-└── rag/                         # CMedTEB 离线检索与评测实验
+│   ├── api/                    # API / 鉴权依赖
+│   ├── services/               # 业务服务与会话管理
+│   ├── repositories/           # 数据访问
+│   ├── database/               # SQLAlchemy / MySQL
+│   ├── workflows/education/    # LangGraph 工作流
+│   ├── llm/                    # DeepSeek 客户端
+│   ├── rag/                    # 在线 RAG HTTP 客户端
+│   └── capabilities/web_search/# 联网检索
+├── migrations/                 # Alembic 数据库迁移
+├── tests/                      # 后端自动化测试
+└── rag/                        # CMedTEB 离线入库 / 检索 / 评测
 ```
 
-## ✅ 测试
+`rag_service/` 为在线检索服务组件，需与上述离线实验目录区分；是否置于同一仓库，以实际部署方式为准。
 
-### 后端测试
+## 当前状态与开发计划
+
+| 模块 | 状态 | 备注 |
+| --- | :---: | --- |
+| JWT 鉴权 / 多会话 / 历史持久化 | ✅ | 已实现 |
+| LangGraph 按需选择 RAG / Web Search | ✅ | 当前单轮工具选择，最多 2 次工具调用 |
+| SSE 增量回复与状态事件 | ✅ | 已实现 |
+| 引用来源编号展示 | 🟡 | 尚未完成逐句证据一致性审计 |
+| CMedTEB Dense / BM25 / Reranker 离线评测 | ✅ | 已有 734 条 Query 实验 |
+| BM25 / Dense 互补召回与 RRF | ⏳ | 待实验验证 |
+| BGE-M3 Sparse 检索 | ⏳ | 待实现 |
+| 医学安全评测与回答事实核验 | ⏳ | 后续重点 |
+| 多轮主动补检 / 上下文压缩 | ⏳ | 待实现 |
+| 症状诊断 / 临床分诊 | ⛔ | 不属于当前医学科普 MVP |
+
+### 测试
 
 ```bash
+# 后端测试
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -q
-```
 
-### RAG 离线测试
-
-以下测试不需要 Milvus 或模型：
-
-```bash
-cd rag
+# 离线数据与检索测试（在 rag/ 目录下）
 .venv/bin/python -m unittest src/code/cmed/test_ingest.py
 .venv/bin/python src/code/cmed/Dense_Retrieval/test_retrieval.py
 ```
 
-现有测试覆盖鉴权、会话隔离、工具选择接口、流式保存、文档切块、父文档聚合和检索指标。**测试通过不等于医学回答质量已经得到验证。**
-
-## 🗺️ 下一步
-
-- [ ] 多轮指代和上下文压缩
-- [ ] 检索相关性与引用真实性回归集
-- [ ] 用药咨询和紧急症状安全评测
-- [ ] 基于检索结果的多轮补检
-- [ ] 完整健康检查与可观测性
-- [ ] 在线 RAG 延迟和质量基准
+> **数据与使用范围**：CMedTEB 采用 **CC BY-NC-SA 4.0** 许可证。请遵守数据集的非商业及署名要求；数据授权不等同于 MedCore 源代码的授权。医学知识库内容仍需开展来源、时效性和事实质量审核。
 
 ---
 
 <div align="center">
-  <sub>MedCore · 让每一次健康科普回答都有据可查</sub>
+  <sub><strong>MedCore</strong> · 不只让模型回答，更让检索过程可追踪、可比较、可优化。</sub>
 </div>
