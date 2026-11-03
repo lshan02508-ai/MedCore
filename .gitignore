@@ -10,5 +10,6 @@ wheels/
 .venv
 .env
 
-# Local planning documents, not part of the published backend
+# Local documentation, not part of the published backend
+/docs/
 /src/docs/
